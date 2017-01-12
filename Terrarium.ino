@@ -20,33 +20,82 @@
 #include <Adafruit_SSD1306.h>
 #include <FastLED.h>
 
-#define UV_LED    D7
-#define NUM_LEDS  8
-#define DHTTYPE   DHT22
-#define ONE_HOUR  (1000*60*60)
+#include "SunSet.h"
+
+#define UV_LED            D7
+#define NUM_LEDS          8
+#define DHTTYPE           DHT22
+#define ONE_HOUR          (1000*60*60)
+#define ONE_MINUTE        (1000*60)
 #define CST_OFFSET        -6
 #define DST_OFFSET        (CST_OFFSET + 1)
-#define TIME_BASE_YEAR      2015
+#define TIME_BASE_YEAR    2015
 
+// Arlington Heights, IL, USA
 #define LATITUDE          42.058102
 #define LONGITUDE         87.984189
 
 // If using software SPI (the default case):
-#define OLED_MOSI  D2
-#define OLED_CLK   D1
-#define OLED_DC    D5
-#define OLED_CS    D6
-#define OLED_RESET D0
+#define OLED_RESET  D0
+#define OLED_CLK    D1
+#define OLED_MOSI   D2
+#define M_DETECT    D3
+#define DHT_22      D4
+#define OLED_DC     D5
+#define OLED_CS     D6
+#define UV_LED      D7
+#define LED_DIN     D8
+#define OLED_PW     RX
+#define MOIST       A0
+
 Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
 CRGB leds[NUM_LEDS];
-DHT dht(D4, DHTTYPE);
+DHT dht(DHT_22, DHTTYPE);
+SunSet sun;
 
 float g_humidity;
 float g_temp;
+int g_moisture;
 
 const uint8_t _usDSTStart[6] = {8,13,12,11,10, 8};
 const uint8_t _usDSTEnd[22]   = {1, 6, 5, 4, 3, 1};
+
+int isSunrise()
+{
+  double sunrise = sun.calcSunrise();
+  double minsPastMidnight = hour() * 60 + minute();
+
+  if ((minsPastMidnight >= (sunrise - 30)) && (minsPastMidnight <= (sunrise + 30))) {
+    return 4;
+  }
+
+  return -1;
+}
+
+int isSunset()
+{
+  double sunset = sun.calcSunrise();
+  double minsPastMidnight = hour() * 60 + minute();
+
+  if ((minsPastMidnight >= (sunset - 30)) && (minsPastMidnight <= (sunset + 30))) {
+    return 4;
+  }
+
+  return -1;
+}
+
+bool isDaytime()
+{
+  double sunrise = sun.calcSunrise();
+  double sunset = sun.calcSunset();
+  double minsPastMidnight = hour() * 60 + minute();
+
+  if ((minsPastMidnight >= (sunrise + 31)) && (minsPastMidnight < (sunset - 31))) {
+    return true;
+  }
+  return false;
+}
 
 int currentTimeZone()
 {
@@ -82,37 +131,44 @@ void getEnvironmental()
 
 void getSoilMoisture()
 {
-  int moisture;
-  digitalWrite(D3, HIGH);
+  digitalWrite(M_DETECT, HIGH);
   delay(10);
-  moisture = analogRead(A0);
-  digitalWrite(D3, LOW);
+  g_moisture = analogRead(MOIST);
+  digitalWrite(M_DETECT, LOW);
+}
+
+void switchUV(bool s)
+{
+  if (s)
+    digitalWrite(UV_LED, HIGH);
+  else
+    digitalWrite(UV_LED, LOW);
 }
 
 void setup() 
 {
   Serial.begin(115200);
-  Serial.println("Personal firmware image running");
-  pinMode(D7, OUTPUT);    // Setup the UV LED
-  pinMode(D3, OUTPUT);    // Setup the On/Off for the soil moisture sensor
-  pinMode(D4, INPUT);     // Setup the 1-wire Temp and humidity
-  digitalWrite(D3, LOW);
-  FastLED.addLeds<WS2812, D8>(leds, NUM_LEDS);
+
+  pinMode(UV_LED, OUTPUT);                // Setup the UV LED
+  pinMode(M_DETECT, OUTPUT);              // Setup the On/Off for the soil moisture sensor
+  pinMode(OLED_PW, OUTPUT);               // Make the RX line a normal 3v3 GPIO
+  pinMode(DHT_22, INPUT);                 // Setup the 1-wire Temp and humidity
+
+  digitalWrite(UV_LED, LOW);
+  
+  FastLED.addLeds<WS2812, LED_DIN>(leds, NUM_LEDS);
   dht.begin();
 
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
   display.begin(SSD1306_SWITCHCAPVCC);
-  display.display();
-  delay(2000);
   display.clearDisplay();
-  display.setTextSize(1);
+  display.setTextSize(2);
   display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  display.println("Personal Firmware");
+  display.setCursor(0,5);
+  display.println("Terrorarium");
   display.display();
 
   WiFi.persistent(false);
-//  WiFi.mode(WIFI_STA);
   WiFi.begin("LivingRoom", "Motorazr2V8");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -133,53 +189,83 @@ void setup()
     else {
       Serial.print("Got NTP time: ");
       Serial.println(NTP.getTimeDateString(NTP.getLastNTPSync()));
+      sun.setCurrentDate(year(), month(), day());
+      NTP.setTimeZone(currentTimeZone());
     }
   });
   NTP.begin("pool.ntp.org", 1, true);
-  NTP.setInterval(1800);
+  NTP.setInterval(3600);
   NTP.setTimeZone(currentTimeZone());
+
+  sun.setPosition(LATITUDE, LONGITUDE, currentTimeZone());
 }
 
 void loop() 
 {
+  int sunrise;
+  int sunset;
+  
   EVERY_N_MILLISECONDS(ONE_HOUR)
   {
-    getEnvironmental();
+    sun.setTZOffset(currentTimeZone());
     getSoilMoisture();
-    NTP.setTimeZone(currentTimeZone());
   }
 
-  display.clearDisplay();
+  EVERY_N_MILLISECONDS(ONE_MINUTE)
+  {
+    getEnvironmental();
+  }
 
-  // text display tests
+  // Update the display
+  display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0,0);
-  display.print(hour());
-  display.print(":");
-  display.print(minute());
-  display.print(":");
-  display.print(second());
+  display.print("Temperature: ");
+  display.print(g_temp);
   display.setCursor(0, 10);
-  display.print(month());
-  display.print("-");
-  display.print(day());
-  display.print("-");
-  display.print(year());
+  display.print("Moisture: ");
+  display.print(g_moisture);
   display.setCursor(0, 20);
-  display.print("Humidity");
+  display.print("Humidity: ");
+  display.print(g_humidity);
   display.display();
 
-  if (hour() > 6 && hour() < 23) {
+  if ((sunrise = isSunrise()) != -1) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].r = 255;
-      leds[i].b = 255;
-      leds[i].g = 200;
+      leds[i].r += sunrise;
+      leds[i].b += sunrise;
+      leds[i].g = 0;
     }
     FastLED.show();
   }
-  if (hour() > 9 && hour() < 15) {
-    digitalWrite(UV_LED, HIGH);
+  else if (isDaytime()) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      leds[i].r = 220;
+      leds[i].b = 220;
+      leds[i].g = 100;
+    }
+    FastLED.show();
   }
+  else if ((sunset = isSunset()) != -1) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      leds[i].r -= sunrise;
+      leds[i].b -= sunrise;
+      leds[i].g = 0;
+    }
+    FastLED.show();    
+  }
+  else {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      leds[i] = CRGB::Black;
+    }
+    FastLED.show();
+  }
+  
+  if (hour() > 10 && hour() < 14)
+    switchUV(true);
+  else
+    switchUV(false);
+    
   delay(1000);
 }
