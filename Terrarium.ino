@@ -63,12 +63,12 @@ SOFTWARE.
 #define OLED_RESET  D0
 #define OLED_CLK    D1
 #define OLED_MOSI   D2
-#define M_DETECT    D3
+#define M_DETECT    D8  // Should be D3, testing
 #define DHT_22      D4
 #define OLED_DC     D5
 #define OLED_CS     D6
 #define UV_LED      D7
-#define LED_DIN     D8
+#define LED_DIN     D3  // Should be D8, testing
 #define OLED_PW     RX
 #define MOIST       A0
 
@@ -178,15 +178,15 @@ void setup()
   pinMode(OLED_PW, OUTPUT);               // Make the RX line a normal 3v3 GPIO
   pinMode(DHT_22, INPUT);                 // Setup the 1-wire Temp and humidity
 
-  digitalWrite(UV_LED, LOW);
+  digitalWrite(UV_LED, HIGH);
   
-  FastLED.addLeds<WS2812, LED_DIN>(leds, NUM_LEDS);
+  FastLED.addLeds<NEOPIXEL, LED_DIN>(leds, NUM_LEDS);
   dht.begin();
 
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
   display.begin(SSD1306_SWITCHCAPVCC);
   display.clearDisplay();
-  display.setTextSize(2);
+  display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0,5);
   display.println("Terrorarium");
@@ -222,6 +222,9 @@ void setup()
   NTP.setTimeZone(currentTimeZone());
 
   sun.setPosition(LATITUDE, LONGITUDE, currentTimeZone());
+  delay(5000);
+  getSoilMoisture();
+  getEnvironmental();
 }
 
 void loop() 
@@ -246,14 +249,15 @@ void loop()
   display.setTextColor(WHITE);
   display.setCursor(0,0);
   display.print("Temperature: ");
-  display.print(g_temp);
+  display.print(g_temp, 1);
   display.setCursor(0, 10);
-  display.print("Moisture: ");
+  display.print("Moisture:    ");
   display.print(g_moisture);
   display.setCursor(0, 20);
-  display.print("Humidity: ");
-  display.print(g_humidity);
+  display.print("Humidity:    ");
+  display.print(g_humidity, 1);
   display.display();
+
 
   if ((sunrise = isSunrise()) != -1) {
     for (int i = 0; i < NUM_LEDS; i++) {
@@ -273,8 +277,8 @@ void loop()
   }
   else if ((sunset = isSunset()) != -1) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].r -= sunrise;
-      leds[i].b -= sunrise;
+      leds[i].r -= sunset;
+      leds[i].b -= sunset;
       leds[i].g = 0;
     }
     FastLED.show();    
