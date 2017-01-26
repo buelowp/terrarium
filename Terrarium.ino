@@ -77,6 +77,7 @@ Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 CRGB leds[NUM_LEDS];
 DHT dht(DHT_22, DHTTYPE);
 SunSet sun;
+int g_sunposition;
 
 float g_humidity;
 float g_temp;
@@ -85,28 +86,34 @@ int g_moisture;
 const uint8_t _usDSTStart[6] = {8,13,12,11,10, 8};
 const uint8_t _usDSTEnd[22]   = {1, 6, 5, 4, 3, 1};
 
-int isSunrise()
+bool isSunrise()
 {
+  double sunrise_s = sun.calcSunrise() - 30;
+  double sunrise_e = sun.calcSunrise() + 30;
   double sunrise = sun.calcSunrise();
   double minsPastMidnight = hour() * 60 + minute();
 
   if ((minsPastMidnight >= (sunrise - 30)) && (minsPastMidnight <= (sunrise + 30))) {
-    return 4;
+    g_sunposition = (sunrise_e - sunrise_s) * 4;
+    return true;
   }
 
-  return -1;
+  return false;
 }
 
-int isSunset()
+bool isSunset()
 {
-  double sunset = sun.calcSunrise();
+  double sunset_s = sun.calcSunset() - 30;
+  double sunset_e = sun.calcSunset() + 30;
+  double sunset = sun.calcSunset();
   double minsPastMidnight = hour() * 60 + minute();
 
   if ((minsPastMidnight >= (sunset - 30)) && (minsPastMidnight <= (sunset + 30))) {
-    return 4;
+    g_sunposition = (sunset_e - sunset_s) * 4;
+    return true;
   }
 
-  return -1;
+  return false;
 }
 
 bool isDaytime()
@@ -146,6 +153,23 @@ int currentTimeZone()
     return offset;
 }
 
+void printDisplay()
+{
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0,0);
+  display.print("Temperature: ");
+  display.print(g_temp, 1);
+  display.setCursor(0, 10);
+  display.print("Moisture:    ");
+  display.print(g_moisture);
+  display.setCursor(0, 20);
+  display.print("Humidity:    ");
+  display.print(g_humidity, 1);
+  display.display();
+}
+
 void getEnvironmental()
 {
   Serial.println("Checking environment");
@@ -173,6 +197,8 @@ void setup()
 {
   Serial.begin(115200);
 
+  g_sunposition = 0;
+  
   pinMode(UV_LED, OUTPUT);                // Setup the UV LED
   pinMode(M_DETECT, OUTPUT);              // Setup the On/Off for the soil moisture sensor
   pinMode(OLED_PW, OUTPUT);               // Make the RX line a normal 3v3 GPIO
@@ -244,25 +270,12 @@ void loop()
   }
 
   // Update the display
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  display.print("Temperature: ");
-  display.print(g_temp, 1);
-  display.setCursor(0, 10);
-  display.print("Moisture:    ");
-  display.print(g_moisture);
-  display.setCursor(0, 20);
-  display.print("Humidity:    ");
-  display.print(g_humidity, 1);
-  display.display();
-
-
-  if ((sunrise = isSunrise()) != -1) {
+  printDisplay();
+  
+  if (isSunrise()) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].r += sunrise;
-      leds[i].b += sunrise;
+      leds[i].r += g_sunposition;
+      leds[i].b += g_sunposition;
       leds[i].g = 0;
     }
     FastLED.show();
@@ -275,10 +288,10 @@ void loop()
     }
     FastLED.show();
   }
-  else if ((sunset = isSunset()) != -1) {
+  else if (isSunset()) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].r -= sunset;
-      leds[i].b -= sunset;
+      leds[i].r -= g_sunposition;
+      leds[i].b -= g_sunposition;
       leds[i].g = 0;
     }
     FastLED.show();    
