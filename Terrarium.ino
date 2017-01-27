@@ -88,44 +88,42 @@ const uint8_t _usDSTEnd[22]   = {1, 6, 5, 4, 3, 1};
 
 bool isSunrise()
 {
-  double sunrise_s = sun.calcSunrise() - 30;
-  double sunrise_e = sun.calcSunrise() + 30;
-  double sunrise = sun.calcSunrise();
-  double minsPastMidnight = hour() * 60 + minute();
+  double sunrise_p = ((hour() * 60 + minute()) - (sun.calcSunrise() - 30));
 
-  if ((minsPastMidnight >= (sunrise - 30)) && (minsPastMidnight <= (sunrise + 30))) {
-    g_sunposition = (sunrise_e - sunrise_s) * 4;
+  if (sunrise_p >= 0 && sunrise_p < 60) {
+    Serial.print("Sunrise_p is:");
+    Serial.println(sunrise_p);
+    g_sunposition = sunrise_p * 4;
     return true;
   }
 
+  Serial.println("Sunrise returning false");
   return false;
 }
 
 bool isSunset()
 {
-  double sunset_s = sun.calcSunset() - 30;
-  double sunset_e = sun.calcSunset() + 30;
-  double sunset = sun.calcSunset();
-  double minsPastMidnight = hour() * 60 + minute();
+  double sunset_p = ((hour() * 60 + minute()) - (sun.calcSunset() - 30));
 
-  if ((minsPastMidnight >= (sunset - 30)) && (minsPastMidnight <= (sunset + 30))) {
-    g_sunposition = (sunset_e - sunset_s) * 4;
+  Serial.print("sunset at: ");
+  if (sunset_p >= 0 && sunset_p < 60) {
+    Serial.print("Sunrise_p is:");
+    Serial.println(sunset_p);
+    g_sunposition = (60 - sunset_p) * 4;
     return true;
   }
 
+  Serial.println("Sunset returning false");
   return false;
 }
 
 bool isDaytime()
 {
-  double sunrise = sun.calcSunrise();
-  double sunset = sun.calcSunset();
-  double minsPastMidnight = hour() * 60 + minute();
-
-  if ((minsPastMidnight >= (sunrise + 31)) && (minsPastMidnight < (sunset - 31))) {
-    return true;
-  }
-  return false;
+  bool test = (isSunset() || isSunrise());
+  //return (isSunset() || isSunrise());
+  Serial.print("isDaytime is: ");
+  Serial.println(test);
+  return test;
 }
 
 int currentTimeZone()
@@ -155,6 +153,7 @@ int currentTimeZone()
 
 void printDisplay()
 {
+  /*
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -167,6 +166,13 @@ void printDisplay()
   display.setCursor(0, 20);
   display.print("Humidity:    ");
   display.print(g_humidity, 1);
+  display.display(); */
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0,0);
+  display.print("sunposition:");
+  display.print(g_sunposition);
   display.display();
 }
 
@@ -276,7 +282,7 @@ void loop()
     for (int i = 0; i < NUM_LEDS; i++) {
       leds[i].r += g_sunposition;
       leds[i].b += g_sunposition;
-      leds[i].g = 0;
+      leds[i].g = 100;
     }
     FastLED.show();
   }
@@ -292,7 +298,7 @@ void loop()
     for (int i = 0; i < NUM_LEDS; i++) {
       leds[i].r -= g_sunposition;
       leds[i].b -= g_sunposition;
-      leds[i].g = 0;
+      leds[i].g = 100;
     }
     FastLED.show();    
   }
