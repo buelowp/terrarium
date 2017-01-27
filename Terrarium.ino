@@ -88,7 +88,7 @@ const uint8_t _usDSTEnd[22]   = {1, 6, 5, 4, 3, 1};
 
 bool isSunrise()
 {
-  double sunrise_p = ((hour() * 60 + minute()) - (sun.calcSunrise() - 30));
+  int sunrise_p = ((hour() * 60 + minute()) - (sun.calcSunrise() - 30));
 
   if (sunrise_p >= 0 && sunrise_p < 60) {
     Serial.print("Sunrise_p is:");
@@ -97,32 +97,26 @@ bool isSunrise()
     return true;
   }
 
-  Serial.println("Sunrise returning false");
   return false;
 }
 
 bool isSunset()
 {
-  double sunset_p = ((hour() * 60 + minute()) - (sun.calcSunset() - 30));
+  int sunset_p = ((hour() * 60 + minute()) - (sun.calcSunset() - 30));
 
-  Serial.print("sunset at: ");
   if (sunset_p >= 0 && sunset_p < 60) {
-    Serial.print("Sunrise_p is:");
+    Serial.print("Sunset_p is:");
     Serial.println(sunset_p);
     g_sunposition = (60 - sunset_p) * 4;
     return true;
   }
 
-  Serial.println("Sunset returning false");
   return false;
 }
 
 bool isDaytime()
 {
   bool test = (isSunset() || isSunrise());
-  //return (isSunset() || isSunrise());
-  Serial.print("isDaytime is: ");
-  Serial.println(test);
   return test;
 }
 
@@ -153,7 +147,6 @@ int currentTimeZone()
 
 void printDisplay()
 {
-  /*
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -166,13 +159,6 @@ void printDisplay()
   display.setCursor(0, 20);
   display.print("Humidity:    ");
   display.print(g_humidity, 1);
-  display.display(); */
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  display.print("sunposition:");
-  display.print(g_sunposition);
   display.display();
 }
 
@@ -280,25 +266,25 @@ void loop()
   
   if (isSunrise()) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].r += g_sunposition;
-      leds[i].b += g_sunposition;
-      leds[i].g = 100;
+      leds[i].r = g_sunposition;
+      leds[i].b = g_sunposition;
+      leds[i].g = (g_sunposition / 2);
     }
     FastLED.show();
   }
   else if (isDaytime()) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].r = 220;
-      leds[i].b = 220;
-      leds[i].g = 100;
+      leds[i].r = 250;
+      leds[i].b = 250;
+      leds[i].g = 125;
     }
     FastLED.show();
   }
   else if (isSunset()) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].r -= g_sunposition;
-      leds[i].b -= g_sunposition;
-      leds[i].g = 100;
+      leds[i].r = g_sunposition;
+      leds[i].b = g_sunposition;
+      leds[i].g = (g_sunposition / 2);
     }
     FastLED.show();    
   }
@@ -307,9 +293,10 @@ void loop()
       leds[i] = CRGB::Black;
     }
     FastLED.show();
+    g_sunposition = 0;
   }
   
-  if (hour() > 10 && hour() < 14)
+  if (hour() > 9 && hour() < 15)
     switchUV(true);
   else
     switchUV(false);
