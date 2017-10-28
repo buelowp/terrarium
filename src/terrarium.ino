@@ -21,32 +21,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-
-#include <Time.h>
-#include <TimeLib.h>
-
-#include <ESP8266WiFi.h>
-#include <ESP8266WiFiAP.h>
-#include <ESP8266WiFiGeneric.h>
-#include <ESP8266WiFiMulti.h>
-#include <ESP8266WiFiScan.h>
-#include <ESP8266WiFiSTA.h>
-#include <ESP8266WiFiType.h>
-#include <WiFiClient.h>
-#include <WiFiClientSecure.h>
-#include <WiFiServer.h>
-#include <WiFiUdp.h>
-
-#include <NtpClientLib.h>
-#include <DHT.h>
-#include <Adafruit_GFX.h>
-#include <gfxfont.h>
+#define FASTLED_ALLOW_INTERRUPTS 0
 #include <Adafruit_SSD1306.h>
+#include <Adafruit_DHT.h>
 #include <FastLED.h>
-
 #include "SunSet.h"
 
-#define UV_LED            D7
+FASTLED_USING_NAMESPACE;
+
 #define NUM_LEDS          8
 #define DHTTYPE           DHT22
 #define ONE_HOUR          (1000*60*60)
@@ -60,49 +42,43 @@ SOFTWARE.
 #define LONGITUDE         87.984189
 
 // If using software SPI (the default case):
-#define OLED_RESET  D0
-#define OLED_CLK    D1
-#define OLED_MOSI   D2
-#define M_DETECT    D8  // Should be D3, testing
-#define DHT_22      D4
-#define OLED_DC     D5
-#define OLED_CS     D6
-#define UV_LED      D7
-#define LED_DIN     D3  // Should be D8, testing
-#define OLED_PW     RX
+#define OLED_RESET  D2
+//#define OLED_SCL    D1
+//#define OLED_SDA    D0
+#define MD          D4
 #define MOIST       A0
+#define DHTPIN      D3
+//#define OLED_DC     D2
+//#define OLED_CS     D4
+#define UV_LED      D5
+#define LED_DIN     D6
 
-Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
+Adafruit_SSD1306 display = Adafruit_SSD1306(OLED_RESET);
+
+DHT dht(DHTPIN, DHTTYPE);
 CRGB leds[NUM_LEDS];
-DHT dht(DHT_22, DHTTYPE);
 SunSet sun;
 int g_sunposition;
+unsigned int DHTnextSampleTime;	    // Next time we want to start sample
+bool bDHTstarted;		    // flag to indicate we started acquisition
 
 float g_humidity;
 float g_temp;
 int g_moisture;
 
 const uint8_t _usDSTStart[6] = {8,13,12,11,10, 8};
-const uint8_t _usDSTEnd[22]   = {1, 6, 5, 4, 3, 1};
+const uint8_t _usDSTEnd[6]   = {1, 6, 5, 4, 3, 1};
 
-bool isSunrise()
+int sunrise()
 {
-  int sunrise_p = ((hour() * 60 + minute()) - (sun.calcSunrise() - 30));
-
-  if (sunrise_p >= 0 && sunrise_p < 60) {
-    Serial.print("Sunrise_p is:");
-    Serial.println(sunrise_p);
-    g_sunposition = sunrise_p * 4;
-    return true;
-  }
-
-  return false;
+  int mins = Time.hour() * 60 + Time.minute();
+  return (mins - sun.calcSunrise() - 30) * 4;
 }
 
 bool isSunset()
 {
-  int sunset_p = ((hour() * 60 + minute()) - (sun.calcSunset() - 30));
+  int sunset_p = ((Time.hour() * 60 + Time.minute()) - (sun.calcSunset() - 30));
 
   if (sunset_p >= 0 && sunset_p < 60) {
     Serial.print("Sunset_p is:");
@@ -124,19 +100,19 @@ int currentTimeZone()
 {
   int offset = CST_OFFSET;
 
-    if (month() > 3 && month() < 11) {
+    if (Time.month() > 3 && Time.month() < 11) {
         offset = DST_OFFSET;
     }
-    else if (month() == 3) {
-        if ((day() == _usDSTStart[year() -  TIME_BASE_YEAR]) && hour() >= 2)
+    else if (Time.month() == 3) {
+        if ((Time.day() == _usDSTStart[Time.year() -  TIME_BASE_YEAR]) && Time.hour() >= 2)
             offset = DST_OFFSET;
-        else if (day() > _usDSTStart[year() -  TIME_BASE_YEAR])
+        else if (Time.day() > _usDSTStart[Time.year() -  TIME_BASE_YEAR])
             offset = DST_OFFSET;
     }
-    else if (month() == 11) {
-        if ((day() == _usDSTEnd[year() -  TIME_BASE_YEAR]) && hour() <=2)
+    else if (Time.month() == 11) {
+        if ((Time.day() == _usDSTEnd[Time.year() -  TIME_BASE_YEAR]) && Time.hour() <=2)
             offset = DST_OFFSET;
-        else if (day() > _usDSTEnd[year() -  TIME_BASE_YEAR])
+        else if (Time.day() > _usDSTEnd[Time.year() -  TIME_BASE_YEAR])
             offset = CST_OFFSET;
     }
 
@@ -165,16 +141,16 @@ void printDisplay()
 void getEnvironmental()
 {
   Serial.println("Checking environment");
-  g_humidity = dht.readHumidity();
-  g_temp = dht.readTemperature(true);
+  g_humidity = dht.getHumidity();
+  g_temp = dht.getTempFarenheit();
 }
 
 void getSoilMoisture()
 {
-  digitalWrite(M_DETECT, HIGH);
+  digitalWrite(MD, HIGH);
   delay(10);
   g_moisture = analogRead(MOIST);
-  digitalWrite(M_DETECT, LOW);
+  digitalWrite(MD, LOW);
 }
 
 void switchUV(bool s)
@@ -185,24 +161,21 @@ void switchUV(bool s)
     digitalWrite(UV_LED, LOW);
 }
 
-void setup() 
+void setup()
 {
   Serial.begin(115200);
 
   g_sunposition = 0;
-  
+
   pinMode(UV_LED, OUTPUT);                // Setup the UV LED
-  pinMode(M_DETECT, OUTPUT);              // Setup the On/Off for the soil moisture sensor
-  pinMode(OLED_PW, OUTPUT);               // Make the RX line a normal 3v3 GPIO
-  pinMode(DHT_22, INPUT);                 // Setup the 1-wire Temp and humidity
+  pinMode(MD, OUTPUT);              // Setup the On/Off for the soil moisture sensor
 
   digitalWrite(UV_LED, HIGH);
-  
+
   FastLED.addLeds<NEOPIXEL, LED_DIN>(leds, NUM_LEDS);
-  dht.begin();
 
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
-  display.begin(SSD1306_SWITCHCAPVCC);
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3D);
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -210,60 +183,36 @@ void setup()
   display.println("Terrorarium");
   display.display();
 
-  WiFi.persistent(false);
-  WiFi.begin("LivingRoom", "Motorazr2V8");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("WiFi connected");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-
-  NTP.onNTPSyncEvent([](NTPSyncEvent_t error) {
-    if (error) {
-    Serial.print("Time Sync error: ");
-    if (error == noResponse)
-      Serial.println("NTP server not reachable");
-    else if (error == invalidAddress)
-      Serial.println("Invalid NTP server address");
-    }
-    else {
-      Serial.print("Got NTP time: ");
-      Serial.println(NTP.getTimeDateString(NTP.getLastNTPSync()));
-      sun.setCurrentDate(year(), month(), day());
-      NTP.setTimeZone(currentTimeZone());
-    }
-  });
-  NTP.begin("pool.ntp.org", 1, true);
-  NTP.setInterval(3600);
-  NTP.setTimeZone(currentTimeZone());
+  DHTnextSampleTime = 0;  // Start the first sample immediately
 
   sun.setPosition(LATITUDE, LONGITUDE, currentTimeZone());
+  dht.begin();
   delay(5000);
   getSoilMoisture();
   getEnvironmental();
+  Serial.println("Startup take 2");
 }
 
-void loop() 
+void loop()
 {
   int sunrise;
   int sunset;
-  
+
   EVERY_N_MILLISECONDS(ONE_HOUR)
   {
     sun.setTZOffset(currentTimeZone());
-    getSoilMoisture();
+//    getSoilMoisture();
   }
 
   EVERY_N_MILLISECONDS(ONE_MINUTE)
   {
+    getSoilMoisture();
     getEnvironmental();
   }
 
   // Update the display
   printDisplay();
-  
+
   if (isSunrise()) {
     for (int i = 0; i < NUM_LEDS; i++) {
       leds[i].r = g_sunposition;
@@ -274,10 +223,9 @@ void loop()
   }
   else if (isDaytime()) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].r = 250;
-      leds[i].b = 250;
-      leds[i].g = 125;
+      leds[i] = CRGB::White;
     }
+    FastLED.setBrightness(100);
     FastLED.show();
   }
   else if (isSunset()) {
@@ -286,7 +234,7 @@ void loop()
       leds[i].b = g_sunposition;
       leds[i].g = (g_sunposition / 2);
     }
-    FastLED.show();    
+    FastLED.show();
   }
   else {
     for (int i = 0; i < NUM_LEDS; i++) {
@@ -295,11 +243,11 @@ void loop()
     FastLED.show();
     g_sunposition = 0;
   }
-  
-  if (hour() > 9 && hour() < 15)
+
+  if (Time.hour() > 9 && Time.hour() < 15)
     switchUV(true);
   else
     switchUV(false);
-    
+
   delay(1000);
 }
