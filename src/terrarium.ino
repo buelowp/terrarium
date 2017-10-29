@@ -21,7 +21,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-#define FASTLED_ALLOW_INTERRUPTS 0
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_DHT.h>
 #include <FastLED.h>
@@ -77,16 +76,14 @@ const uint8_t _usDSTEnd[6]   = {1, 6, 5, 4, 3, 1};
 
 int sunrise()
 {
-  g_mins = Time.hour() * 60 + Time.minute();
   if (g_mins >= (sun.calcSunrise() - 30) && g_mins < (sun.calcSunrise() + 30)) {
-    return g_mins - ((sun.calcSunrise() - 30) * 4);
+    return (g_mins - (sun.calcSunrise() - 30)) * 4;
   }
   return -1;
 }
 
 int sunset()
 {
-  g_mins = Time.hour() * 60 + Time.minute();
   if (g_mins >= (sun.calcSunset() - 30) && g_mins < (sun.calcSunset() + 30)) {
     return ((sun.calcSunset() + 30) - g_mins) * 4;
   }
@@ -171,6 +168,7 @@ void setup()
   Serial.begin(115200);
 
   g_sunposition = 0;
+  g_brightVal = 0;
 
   pinMode(UV_LED, OUTPUT);                // Setup the UV LED
   pinMode(MD, OUTPUT);              // Setup the On/Off for the soil moisture sensor
@@ -198,6 +196,7 @@ void setup()
 
   Time.zone(currentTimeZone());
   sun.setPosition(LATITUDE, LONGITUDE, currentTimeZone());
+  sun.setCurrentDate(Time.year(), Time.month(), Time.day());
   dht.begin();
   delay(5000);
   getSoilMoisture();
@@ -207,8 +206,6 @@ void setup()
 
 void loop()
 {
-  int s = 0;
-
   g_sunrise = sun.calcSunrise();
   g_sunset = sun.calcSunset();
   g_mins = Time.hour() * 60 + Time.minute();
@@ -216,6 +213,7 @@ void loop()
 
   EVERY_N_MILLISECONDS(ONE_HOUR)
   {
+    sun.setCurrentDate(Time.year(), Time.month(), Time.day());
     Time.zone(currentTimeZone());
     sun.setTZOffset(currentTimeZone());
     Particle.syncTime();
@@ -258,7 +256,7 @@ void loop()
     FastLED.show();
   }
 
-  if (Time.hour() > 9 && Time.hour() < 15)
+  if (Time.hour() > 8 && Time.hour() < 16)
     switchUV(true);
   else
     switchUV(false);
