@@ -218,12 +218,12 @@ void loop()
   {
     Time.zone(currentTimeZone());
     sun.setTZOffset(currentTimeZone());
-//    getSoilMoisture();
+    Particle.syncTime();
+    getSoilMoisture();
   }
 
   EVERY_N_MILLISECONDS(ONE_MINUTE)
   {
-    getSoilMoisture();
     getEnvironmental();
   }
 
