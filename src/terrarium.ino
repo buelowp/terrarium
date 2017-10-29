@@ -53,6 +53,11 @@ FASTLED_USING_NAMESPACE;
 #define UV_LED      D5
 #define LED_DIN     D6
 
+int g_mins;
+int g_sunrise;
+int g_sunset;
+int g_timeZone;
+int g_brightVal;
 
 Adafruit_SSD1306 display = Adafruit_SSD1306(OLED_RESET);
 
@@ -72,27 +77,25 @@ const uint8_t _usDSTEnd[6]   = {1, 6, 5, 4, 3, 1};
 
 int sunrise()
 {
-  int mins = Time.hour() * 60 + Time.minute();
-  if (mins >= (sun.calcSunrise() - 30) && mins < (sun.calcSunrise() + 30)) {
-    return mins - ((sun.calcSunrise() - 30) * 4);
+  g_mins = Time.hour() * 60 + Time.minute();
+  if (g_mins >= (sun.calcSunrise() - 30) && g_mins < (sun.calcSunrise() + 30)) {
+    return g_mins - ((sun.calcSunrise() - 30) * 4);
   }
   return -1;
 }
 
 int sunset()
 {
-  int mins = Time.hour() * 60 + Time.minute();
-  if (mins >= (sun.calcSunset() - 30) && mins < (sun.calcSunset() + 30)) {
-    return ((sun.calcSunset() + 30) - mins) * 4;
+  g_mins = Time.hour() * 60 + Time.minute();
+  if (g_mins >= (sun.calcSunset() - 30) && g_mins < (sun.calcSunset() + 30)) {
+    return ((sun.calcSunset() + 30) - g_mins) * 4;
   }
   return -1;
 }
 
 bool isDaytime()
 {
-  int mins = Time.hour() * 60 + Time.minute();
-
-  if ((mins >= (sun.calcSunrise() + 30)) && ((mins < sun.calcSunset()) - 30))
+  if ((g_mins >= (sun.calcSunrise() + 30)) && (g_mins < (sun.calcSunset() - 30)))
     return true;
 
   return false;
@@ -176,6 +179,12 @@ void setup()
 
   FastLED.addLeds<NEOPIXEL, LED_DIN>(leds, NUM_LEDS);
 
+  Particle.variable("g_mins", g_mins);
+  Particle.variable("g_sunrise", g_sunrise);
+  Particle.variable("g_sunset", g_sunset);
+  Particle.variable("g_timeZone", g_timeZone);
+  Particle.variable("g_brightVal", g_brightVal);
+
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
   display.begin(SSD1306_SWITCHCAPVCC, 0x3D);
   display.clearDisplay();
@@ -187,6 +196,7 @@ void setup()
 
   DHTnextSampleTime = 0;  // Start the first sample immediately
 
+  Time.zone(currentTimeZone());
   sun.setPosition(LATITUDE, LONGITUDE, currentTimeZone());
   dht.begin();
   delay(5000);
@@ -199,8 +209,14 @@ void loop()
 {
   int s = 0;
 
+  g_sunrise = sun.calcSunrise();
+  g_sunset = sun.calcSunset();
+  g_mins = Time.hour() * 60 + Time.minute();
+  g_timeZone = currentTimeZone();
+
   EVERY_N_MILLISECONDS(ONE_HOUR)
   {
+    Time.zone(currentTimeZone());
     sun.setTZOffset(currentTimeZone());
 //    getSoilMoisture();
   }
@@ -214,12 +230,11 @@ void loop()
   // Update the display
   printDisplay();
 
-  if ((s = sunrise()) != -1) {
+  if ((g_brightVal = sunrise()) != -1) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].r = s;
-      leds[i].b = s;
-      leds[i].g = s;
+      leds[i] = CRGB::White;
     }
+    FastLED.setBrightness(g_brightVal);
     FastLED.show();
   }
   else if (isDaytime()) {
@@ -229,12 +244,11 @@ void loop()
     FastLED.setBrightness(250);
     FastLED.show();
   }
-  else if ((s = sunset()) != -1) {
+  else if ((g_brightVal = sunset()) != -1) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].r = s;
-      leds[i].b = s;
-      leds[i].g = s;
+      leds[i] = CRGB::White;
     }
+    FastLED.setBrightness(g_brightVal);
     FastLED.show();
   }
   else {
