@@ -30,6 +30,8 @@ FASTLED_USING_NAMESPACE;
 
 #define NUM_LEDS          8
 #define DHTTYPE           DHT22
+#define SEVEN_HOURS       (60*60*7)
+#define SIX_HOURS         (1000*60*60*6)
 #define ONE_HOUR          (1000*60*60)
 #define ONE_MINUTE        (1000*60)
 #define CST_OFFSET        -6
@@ -211,12 +213,16 @@ void loop()
   g_mins = Time.hour() * 60 + Time.minute();
   g_timeZone = currentTimeZone();
 
+  EVERY_N_MILLISECONDS(SIX_HOURS)
+  {
+    Particle.syncTime();
+  }
+
   EVERY_N_MILLISECONDS(ONE_HOUR)
   {
     sun.setCurrentDate(Time.year(), Time.month(), Time.day());
     Time.zone(currentTimeZone());
     sun.setTZOffset(currentTimeZone());
-    Particle.syncTime();
     getSoilMoisture();
   }
 
@@ -256,10 +262,15 @@ void loop()
     FastLED.show();
   }
 
-  if (Time.hour() > 8 && Time.hour() < 16)
+  if (Time.hour() >= 8 && Time.hour() <= 16)
     switchUV(true);
   else
     switchUV(false);
+
+  if (Time.hour() >= 20) {
+    display.clearDisplay();
+    System.sleep(SLEEP_MODE_DEEP, SEVEN_HOURS);
+  }
 
   delay(1000);
 }
