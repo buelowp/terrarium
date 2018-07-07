@@ -176,8 +176,9 @@ void setup()
   pinMode(MD, OUTPUT);              // Setup the On/Off for the soil moisture sensor
 
   digitalWrite(UV_LED, HIGH);
+  digitalWrite(MD, LOW);
 
-  FastLED.addLeds<NEOPIXEL, LED_DIN>(leds, NUM_LEDS);
+  FastLED.addLeds<APA102>(leds, NUM_LEDS);
 
   Particle.variable("g_mins", g_mins);
   Particle.variable("g_sunrise", g_sunrise);
@@ -191,7 +192,7 @@ void setup()
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0,5);
-  display.println("Terrorarium");
+  display.println("Terrarium");
   display.display();
 
   DHTnextSampleTime = 0;  // Start the first sample immediately
@@ -203,7 +204,6 @@ void setup()
   delay(5000);
   getSoilMoisture();
   getEnvironmental();
-  Serial.println("Startup take 2");
 }
 
 void loop()
@@ -269,6 +269,8 @@ void loop()
 
   if (Time.hour() >= 20) {
     display.clearDisplay();
+    display.display();
+    delay(100);
     System.sleep(SLEEP_MODE_DEEP, SEVEN_HOURS);
   }
 
